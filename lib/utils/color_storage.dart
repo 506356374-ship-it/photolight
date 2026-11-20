@@ -15,7 +15,11 @@ class ColorStorage {
     final prefs = await SharedPreferences.getInstance();
     var list = prefs.getStringList(_key) ?? [];
     final hex = c.value.toRadixString(16).padStart(8, '0');
-    if (!list.contains(hex)) { list.insert(0, hex); if (list.length > _max) list = list.take(_max).toList(); await prefs.setStringList(_key, list); }
+    if (!list.contains(hex)) {
+      list.insert(0, hex);
+      if (list.length > _max) list = list.take(_max).toList();
+      await prefs.setStringList(_key, list);
+    }
   }
 
   static Future<void> remove(Color c) async {
