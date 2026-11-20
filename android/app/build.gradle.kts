@@ -6,8 +6,7 @@ plugins {
 
 android {
     namespace = "com.example.photolight"
-    compileSdk = flutter.compileSdkVersion
-    ndkVersion = flutter.ndkVersion
+    compileSdk = 34
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -28,8 +27,8 @@ android {
 
     defaultConfig {
         applicationId = "com.example.photolight"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
+        minSdk = 21
+        targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
     }
