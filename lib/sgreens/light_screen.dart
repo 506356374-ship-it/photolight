@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:screen_brightness/screen_brightness.dart';
 import '../widgets/color_picker_rgb.dart';
-import '../utils/color_storage.dart';
 
 class LightScreen extends StatefulWidget {
   const LightScreen({super.key});
@@ -9,49 +7,45 @@ class LightScreen extends StatefulWidget {
   State<LightScreen> createState() => _LightScreenState();
 }
 
-class _LightScreenState extends State<LightScreen> with TickerProviderStateMixin {
+class _LightScreenState extends State<LightScreen> with SingleTickerProviderStateMixin {
   Color _currentColor = Colors.white;
-  int _mode = 0;
+  int _mode = 0; // 0纯色 1频闪 2烛光 3自定义
   double _brightness = 1.0;
   double _strobeFreq = 10.0;
   double _candleSpeed = 1.0;
   int _colorTemp = 5000;
   bool _showControls = true;
-  late AnimationController _colorAnimController;
-  late Animation<Color?> _colorAnimation;
+  late AnimationController _animController;
+  late Animation<Color?> _colorAnim;
   Color _oldColor = Colors.white;
+  bool _strobeOn = true;
 
-  final List<int> _colorTemps = [2700, 3200, 4000, 5000, 6500, 9000];
-  final List<String> _modeNames = ['纯色', '渐变', '频闪', '烛光', '自定义'];
+  final List<int> _temps = [2700, 3200, 4000, 5000, 6500, 9000];
+  final List<String> _modeNames = ['纯色', '频闪', '烛光', '自定义'];
 
   @override
   void initState() {
     super.initState();
-    _colorAnimController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
-    _colorAnimation = AlwaysStoppedAnimation(_currentColor);
-    _setMaxBrightness();
+    _animController = AnimationController(vsync: this, duration: const Duration(milliseconds: 300));
+    _colorAnim = AlwaysStoppedAnimation(_currentColor);
   }
 
-  Future<void> _setMaxBrightness() async {
-    try { await ScreenBrightness().setScreenBrightness(1.0); } catch (_) {}
-  }
-
-  void _updateColor(Color newColor) {
+  void _updateColor(Color c) {
     _oldColor = _currentColor;
-    _colorAnimController.reset();
-    _colorAnimation = ColorTween(begin: _oldColor, end: newColor).animate(
-      CurvedAnimation(parent: _colorAnimController, curve: Curves.easeInOutCubic),
+    _animController.reset();
+    _colorAnim = ColorTween(begin: _oldColor, end: c).animate(
+      CurvedAnimation(parent: _animController, curve: Curves.easeInOutCubic),
     );
-    _colorAnimController.forward();
-    setState(() => _currentColor = newColor);
+    _animController.forward();
+    setState(() => _currentColor = c);
   }
 
-  Color _tempToColor(int temp) {
-    if (temp <= 2700) return const Color(0xFFFF8B3A);
-    if (temp <= 3200) return const Color(0xFFFFA95C);
-    if (temp <= 4000) return const Color(0xFFFFD1A8);
-    if (temp <= 5000) return const Color(0xFFFFFFFF);
-    if (temp <= 6500) return const Color(0xFFD4E3FF);
+  Color _tempToColor(int t) {
+    if (t <= 2700) return const Color(0xFFFF8B3A);
+    if (t <= 3200) return const Color(0xFFFFA95C);
+    if (t <= 4000) return const Color(0xFFFFD1A8);
+    if (t <= 5000) return const Color(0xFFFFFFFF);
+    if (t <= 6500) return const Color(0xFFD4E3FF);
     return const Color(0xFF9BC4FF);
   }
 
@@ -62,28 +56,40 @@ class _LightScreenState extends State<LightScreen> with TickerProviderStateMixin
         onTap: () => setState(() => _showControls = !_showControls),
         child: Stack(
           children: [
+            // 补光区域
             AnimatedBuilder(
-              animation: _colorAnimController,
-              builder: (context, child) {
+              animation: _animController,
+              builder: (context, _) {
+                Color display = _colorAnim.value ?? _currentColor;
+                if (_mode == 1 && !_strobeOn) display = Colors.black;
+                if (_mode == 2) {
+                  // 烛光用透明度模拟
+                  display = _currentColor.withOpacity(_brightness);
+                }
                 return Container(
                   width: double.infinity,
                   height: double.infinity,
-                  color: _colorAnimation.value ?? _currentColor,
+                  color: display,
                 );
               },
             ),
+            // 控制面板
             if (_showControls)
               Positioned(
                 bottom: 0, left: 0, right: 0,
                 child: Container(
                   padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Colors.black.withOpacity(0.85), Colors.transparent]),
+                    gradient: LinearGradient(
+                      begin: Alignment.bottomCenter, end: Alignment.topCenter,
+                      colors: [Colors.black.withOpacity(0.85), Colors.transparent],
+                    ),
                   ),
                   child: SingleChildScrollView(
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
+                        // 模式选择
                         SizedBox(
                           height: 40,
                           child: ListView.builder(
@@ -99,27 +105,52 @@ class _LightScreenState extends State<LightScreen> with TickerProviderStateMixin
                             ),
                           ),
                         ),
-                        if (_mode != 4) ...[
+                        // 色温
+                        if (_mode != 3) ...[
                           const SizedBox(height: 8),
                           const Text('色温', style: TextStyle(color: Colors.white70)),
                           Slider(
                             value: _colorTemp.toDouble(),
                             min: 2700, max: 9000, divisions: 5,
                             label: '${_colorTemp}K',
-                            onChanged: (v) { setState(() { _colorTemp = v.round(); _updateColor(_tempToColor(v.round())); }); },
+                            onChanged: (v) {
+                              setState(() { _colorTemp = v.round(); _updateColor(_tempToColor(v.round())); });
+                            },
                           ),
                         ],
-                        if (_mode == 4) ...[
+                        // 自定义颜色
+                        if (_mode == 3) ...[
                           const SizedBox(height: 8),
-                          ColorPickerRGB(onColorChanged: _updateColor, initialColor: _currentColor),
+                          ColorPickerRGB(
+                            onColorChanged: _updateColor,
+                            initialColor: _currentColor,
+                          ),
                         ],
+                        // 亮度
                         const SizedBox(height: 8),
                         const Text('亮度', style: TextStyle(color: Colors.white70)),
-                        Slider(value: _brightness, min: 0.1, max: 1, onChanged: (v) => setState(() => _brightness = v)),
-                        if (_mode == 2)
-                          Slider(value: _strobeFreq, min: 1, max: 30, label: '频闪 ${_strobeFreq.round()}Hz', onChanged: (v) => setState(() => _strobeFreq = v)),
-                        if (_mode == 3)
-                          Slider(value: _candleSpeed, min: 0.5, max: 3, label: '速度 ${_candleSpeed.toStringAsFixed(1)}', onChanged: (v) => setState(() => _candleSpeed = v)),
+                        Slider(
+                          value: _brightness, min: 0.1, max: 1,
+                          onChanged: (v) => setState(() => _brightness = v),
+                        ),
+                        // 频闪
+                        if (_mode == 1) ...[
+                          const Text('频闪频率', style: TextStyle(color: Colors.white70)),
+                          Slider(
+                            value: _strobeFreq, min: 1, max: 30,
+                            label: '${_strobeFreq.round()}Hz',
+                            onChanged: (v) => setState(() => _strobeFreq = v),
+                          ),
+                        ],
+                        // 烛光
+                        if (_mode == 2) ...[
+                          const Text('烛光速度', style: TextStyle(color: Colors.white70)),
+                          Slider(
+                            value: _candleSpeed, min: 0.5, max: 3,
+                            label: _candleSpeed.toStringAsFixed(1),
+                            onChanged: (v) => setState(() => _candleSpeed = v),
+                          ),
+                        ],
                       ],
                     ),
                   ),
