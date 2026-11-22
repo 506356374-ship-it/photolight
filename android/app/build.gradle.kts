@@ -26,11 +26,12 @@ android {
     }
 
     buildTypes {
-        release {
-            isMinifyEnabled = false
-            signingConfig = signingConfigs.getByName("debug")
-        }
+    release {
+        isMinifyEnabled = false      // 关闭代码压缩
+        isShrinkResources = false    // 关闭资源压缩
+        signingConfig = signingConfigs.getByName("debug") // 用 debug 签名出 release 包，方便测试
     }
+}
 }
 
 flutter {
